@@ -436,7 +436,7 @@ for video_number = video_numbers
             if use_efficient_sigma_cache
                 %Using num_feature_vals = 100 for CVPR results. Comment out to use 255 instead
                 num_feature_vals = 100;
-                [bg_mask fg_mask bg_sigma_images fg_sigma_images] = classify_using_kde_sharpening_sigma_with_cache( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_sigma_images_old, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_sigma_images_old, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, 0 );
+                [bg_mask fg_mask bg_sigma_images fg_sigma_images] = classify_using_kde_sharpening_sigma_with_cache_cvpr( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_sigma_images_old, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_sigma_images_old, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, 0 );
                 bg_sigma_images_old = bg_sigma_images;
                 fg_sigma_images_old = fg_sigma_images;
 

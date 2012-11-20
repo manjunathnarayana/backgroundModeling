@@ -1,5 +1,5 @@
-function [bg_mask fg_mask bg_sigmas_image fg_sigmas_image] = classify_using_kde_sharpening_sigma_with_cache( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, prev_bg_sigma_images, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, prev_fg_sigma_images, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, debug_flag)
-%function [bg_mask fg_mask bg_sigmas_image fg_sigmas_image] = classify_using_kde_sharpening_sigma_with_cache( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, prev_bg_sigma_images, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, prev_fg_sigma_images, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, debug_flag)
+function [bg_mask fg_mask bg_sigmas_image fg_sigmas_image] = classify_using_kde_sharpening_sigma_with_cache_cvpr( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, prev_bg_sigma_images, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, prev_fg_sigma_images, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, debug_flag)
+%function [bg_mask fg_mask bg_sigmas_image fg_sigmas_image] = classify_using_kde_sharpening_sigma_with_cache_cvpr( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, prev_bg_sigma_images, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, prev_fg_sigma_images, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, debug_flag)
 %Function that classifies frames as bg/fg with kde likelihoods, but uses cached covariance values from previous frame where possible. Adaptive kernel variance is performed only in required pixels
 %This is CVPR 2012 (Narayana et. al) code -- normalizing by number of frames, using uniform fg factor
 %Function that classifies pixels as bg/fg based on the kde point samples in bg_model and fg_model
@@ -45,7 +45,7 @@ for res=1:num_resolutions
     %First classify any pixels that are obviously bg or fg based on old sigma values
     
     %Calculate KDE likelihoods for bg and fg using old sigma values
-    [selective_maps{res} bg_liks_selective{res} selective_bg_sigmas_image{res} fg_liks_selective{res} selective_fg_sigmas_image{res}] = selective_calculate_kde_likelihood_bg_fg_with_cache( img_pixels{res}, bg_model_sampled, bg_indicator_sampled, prev_bg_sigma_images{res}, bg_sigma_XYs{res}, bg_sigma_Ys{res}, bg_sigma_UVs{res}, bg_near_rows, bg_near_cols, 0, fg_model{res}, fg_indicator{res}, prev_fg_sigma_images{res}, fg_sigma_XYs{res}, fg_sigma_Ys{res}, fg_sigma_UVs{res}, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, debug_flag);
+    [selective_maps{res} bg_liks_selective{res} selective_bg_sigmas_image{res} fg_liks_selective{res} selective_fg_sigmas_image{res}] = selective_calculate_kde_likelihood_bg_fg_with_cache_cvpr( img_pixels{res}, bg_model_sampled, bg_indicator_sampled, prev_bg_sigma_images{res}, bg_sigma_XYs{res}, bg_sigma_Ys{res}, bg_sigma_UVs{res}, bg_near_rows, bg_near_cols, 0, fg_model{res}, fg_indicator{res}, prev_fg_sigma_images{res}, fg_sigma_XYs{res}, fg_sigma_Ys{res}, fg_sigma_UVs{res}, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, debug_flag);
     [num_res_rows num_res_cols num_res_dims] = size( img_pixels{res});
     num_selected_pixels = sum( selective_maps{res}(:));
     %printing statistics about number of pixels for which the efficient processing was used
@@ -53,9 +53,9 @@ for res=1:num_resolutions
     
     %The function below reads the selective_map. In places where selective_map is zero, do the full processing as before. In places where selective_map is one, simply copy the value of the likelihoods from the X_liks_selective image. Set the X_sigmas_image to be the same as the prev_X_sigma_image at these pixels
     %Calculate KDE likelihoods for bg in the selected pixels where full computation is desired
-    [bg_liks{res} bg_sigmas_image{res} bg_model_sigmas{res}] = selective_calculate_kde_likelihood_sharpening( img_pixels{res}, bg_model_sampled, bg_indicator_sampled, selective_maps{res}, bg_liks_selective{res}, selective_bg_sigmas_image{res}, bg_sigma_XYs{res}, bg_sigma_Ys{res}, bg_sigma_UVs{res}, bg_near_rows, bg_near_cols, 0, num_feature_vals, debug_flag);
+    [bg_liks{res} bg_sigmas_image{res} bg_model_sigmas{res}] = selective_calculate_kde_likelihood_sharpening_cvpr( img_pixels{res}, bg_model_sampled, bg_indicator_sampled, selective_maps{res}, bg_liks_selective{res}, selective_bg_sigmas_image{res}, bg_sigma_XYs{res}, bg_sigma_Ys{res}, bg_sigma_UVs{res}, bg_near_rows, bg_near_cols, 0, num_feature_vals, debug_flag);
     %Calculate KDE likelihoods for fg in the selected pixels where full computation is desired
-    [fg_liks{res} fg_sigmas_image{res} fg_model_sigmas{res}] = selective_calculate_kde_likelihood_sharpening( img_pixels{res}, fg_model{res}, fg_indicator{res}, selective_maps{res}, fg_liks_selective{res}, selective_fg_sigmas_image{res}, fg_sigma_XYs{res}, fg_sigma_Ys{res}, fg_sigma_UVs{res}, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, debug_flag);
+    [fg_liks{res} fg_sigmas_image{res} fg_model_sigmas{res}] = selective_calculate_kde_likelihood_sharpening_cvpr( img_pixels{res}, fg_model{res}, fg_indicator{res}, selective_maps{res}, fg_liks_selective{res}, selective_fg_sigmas_image{res}, fg_sigma_XYs{res}, fg_sigma_Ys{res}, fg_sigma_UVs{res}, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, debug_flag);
 end
 
 %Combine likelihoods from different resolutions
