@@ -58,7 +58,7 @@ for video_number = video_numbers
     %(1) BMVC 2012 - joint domain-range + adaptive kernel variance 
     %(2) CVPR 2012 - adaptive kernel variance
     %(3) Our implementation of Sheikh-Shah
-    algorithm_to_use = 2;
+    algorithm_to_use = 1;
 
     %Call load video script
     load_video
@@ -69,7 +69,7 @@ for video_number = video_numbers
     disp( input_sequence_files_suffix);
     
     %display options
-    display_general = 1;
+    display_general = 0;
 
     %max frames to classify
     max_track_frame = total_num_frames;
@@ -89,7 +89,7 @@ for video_number = video_numbers
     
     %Formulate as a three class problem - bg v/s seen foreground v/s new foreground
     %Must be set to 1 for BMVC 2012 results
-    use_bg_fg_new_classes = 0;
+    use_bg_fg_new_classes = 1;
     
     %Suboptions for each algorithm
     %For all algorithms
@@ -113,8 +113,8 @@ for video_number = video_numbers
     num_siltp_resolutions = 3;
     %number of resolutions for color features (NOTE - Untested for greater than 1 )
     %TODO - Test and make it work for higher resolutions
-    use_multi_resolution = 1;
-    num_resolutions = 3;
+    use_multi_resolution = 0;
+    num_resolutions = 1;
     if use_multi_resolution==0
         num_resolutions = 1;
     end
@@ -537,7 +537,7 @@ for video_number = video_numbers
                 num_color_feature_vals = 100;
                 %Using num_siltp_feature_vals = 81
                 num_siltp_feature_vals = 81;
-                [bg_mask fg_mask dummy_variable bg_sigma_images fg_sigma_images] = classify_using_lab_siltp_kde_sharpening_sigma_with_cache( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_sigma_images_old, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_sigma_images_old, fg_near_rows, fg_near_cols, fg_uniform_factor, num_color_feature_vals, num_siltp_feature_vals, 0 );
+                [bg_mask fg_mask bg_sigma_images fg_sigma_images] = classify_using_lab_siltp_kde_sharpening_sigma_with_cache_cvpr( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_sigma_images_old, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_sigma_images_old, fg_near_rows, fg_near_cols, fg_uniform_factor, num_color_feature_vals, num_siltp_feature_vals, 0 );
                 bg_sigma_images_old = bg_sigma_images;
                 fg_sigma_images_old = fg_sigma_images;
             %Else use the full method with adaptive variance selection
@@ -553,7 +553,7 @@ for video_number = video_numbers
         %BMVC 2012 algorithm - Joint domain-range with improvements, with adaptive kernel selection
         if algorithm_to_use == 1
             if use_bg_fg_new_classes == 1
-                [bg_mask fg_mask] = classify_lab_siltp_using_kde_sharpening_sigma_3_classes( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_near_rows, fg_near_cols, epsilon_bayes_threshold, search_window, num_feature_vals, object_tracking_version, track_frame>= 108800 );
+                [bg_mask fg_mask] = classify_lab_siltp_using_kde_sharpening_sigma_3_classes( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_near_rows, fg_near_cols, num_color_feature_vals, num_siltp_feature_vals, 0 );
             else
                 error('Error - No alternative procedure here');
             end

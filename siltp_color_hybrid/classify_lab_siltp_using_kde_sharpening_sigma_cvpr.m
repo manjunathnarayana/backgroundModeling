@@ -4,13 +4,13 @@ function [bg_mask fg_mask] = classify_lab_siltp_using_kde_sharpening_sigma_cvpr(
 %Function that classifies pixels as bg/fg based on the kde point samples in bg_model and  fg_model
 %img_pixels is the r x c x d representation of pixels in the image
 %bg_model and fg_model are k x r x c x d in size where k = number of frames for which the model is being kept, r is number of rows in the image, c is number of columns in the image, and d is the number of dimensions of the kernel
-%the indicator matrices identify which pixels in each frame are valid bg/fg/object pixels
-%the covariance matrix (sigma) and priors for each class are also input to the function
+%indicator shows (in a soft manner) which pixels in the model belong to this process and which dont. indicator values are used as a weight for each sample in the kde likelihood calculation
+%the covariance values (sigma) and priors for each class are also input to the function
 %the near_rows and near_cols denote how much on each side of the pixel must be considered as neighborhood for kde samples
 %fg_uniform_factor is the factor which includes a uniform distribution in the fg model. ( There is no other way to include a uniform distribution using kde samples). p(x|fg) = fg_uniform_factor*uniform_pdf + (1-fg_uniform_factor)*fg_kde_estimate
 %num_color_feature_vals = number of values each color channel feature can take -- this is used in generating the uniform distributions for likelihood. Technically should be 255, but this value results in very small uniform likelihoods (many foreground objects go undetected). For CVPR 2012 results, 100 was used instead.
 %num_siltp_feature_vals = number of values siltp features can take (Typically 81)
-%bg_sigmas and fg_sigmas are cells that have candidate sigma values for XY, Y (or R), and UV (or GB) dimensions
+%bg_sigmas and fg_sigmas are cells that have candidate sigma values for XY, Y (or R), UV (or GB), and SILTP dimensions
 
 temp_bg_model = bg_model{1};
 temp_fg_model = fg_model{1};

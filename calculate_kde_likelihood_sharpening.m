@@ -1,6 +1,7 @@
 function [liks sigma_image sigmas] = calculate_kde_likelihood_sharpening( pixel_samples, model, indicator, sigma_XYs, sigma_Ys, sigma_UVs, neighborhood_rows, neighborhood_cols, uniform_factor, num_vals, debug_flag)
 %function [liks sigma_image sigmas] = calculate_kde_likelihood_sharpening( pixel_samples, model, indicator, sigma_XYs, sigma_Ys, sigma_UVs, neighborhood_rows, neighborhood_cols, uniform_factor, num_vals, debug_flag)
-%function that returns the likelihoods of the pixel_samples under given model. indicator shows which pixels in the model belong to this process and which dont. Only pixels that have corresponding indicator value of 1 are added up in the kde equation. sigma is the input covariance matrix
+%function that returns the likelihoods of the pixel_samples under given model. 
+%function that returns the likelihoods of the pixel_samples under given model. indicator shows (in a soft manner) which pixels in the model belong to this process and which dont. indicator values are used as a weight for each sample in the kde likelihood calculation
 %Both pixel_samples are of size r x c x d. model is of size k x r x c x d. indicator is of size k x r x c. sigma is d x d in size
 %neighborhood_rows and neighborhood_cols denote the number of pixels to consider on each side as neighbors. A 3x3 neighborhood is defined by neighborhood_rows = neighborhood_cols = 1
 %uniform_factor basically is the weight of a uniform distribution mixed to the kde estimate
@@ -116,6 +117,7 @@ for i=1:num_rows*num_cols
     xy_const_repeat = repmat( xy_const, [num_centers 1]);
     xy_liks_sum = xy_lik./xy_const_repeat.*true_mask_repeat;
     norm_factor = sum( xy_liks_sum);
+    %Proper normalization, as described in BMVC 2012
     lik_sum_all_sigmas = lik_sum_all_sigmas./const./norm_factor;
 
     %Find the covariance that results in highest likelihood

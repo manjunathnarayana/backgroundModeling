@@ -1,5 +1,5 @@
-function [liks sigma_image sigmas] = calculate_lab_siltp_kde_likelihood_sharpening_cvpr( pixel_samples, model, indicator, sigma_XYs, sigma_Ls, sigma_ABs, sigma_LTPs, neighborhood_rows, neighborhood_cols, uniform_factor, num_color_vals, num_siltp_vals, debug_flag)
-%function [liks sigma_image sigmas] = calculate_lab_siltp_kde_likelihood_sharpening_cvpr( pixel_samples, model, indicator, sigma_XYs, sigma_Ls, sigma_ABs, sigma_LTPs, neighborhood_rows, neighborhood_cols, uniform_factor, num_color_vals, num_siltp_vals, debug_flag)
+function [liks sigma_image sigmas] = calculate_lab_siltp_kde_likelihood_sharpening( pixel_samples, model, indicator, sigma_XYs, sigma_Ls, sigma_ABs, sigma_LTPs, neighborhood_rows, neighborhood_cols, uniform_factor, num_color_vals, num_siltp_vals, debug_flag)
+%function [liks sigma_image sigmas] = calculate_lab_siltp_kde_likelihood_sharpening( pixel_samples, model, indicator, sigma_XYs, sigma_Ls, sigma_ABs, sigma_LTPs, neighborhood_rows, neighborhood_cols, uniform_factor, num_color_vals, num_siltp_vals, debug_flag)
 %function that returns the likelihoods of the pixel_samples under given model. indicator shows (in a soft manner) which pixels in the model belong to this process and which dont. indicator values are used as a weight for each sample in the kde likelihood calculation
 %Both pixel_samples are of size r x c x d. model is of size k x r x c x d. indicator is of size k x r x c. sigma is d x d in size
 %neighborhood_rows and neighborhood_cols denote the number of pixels to consider on each side as neighbors. A 3x3 neighborhood is defined by neighborhood_rows = neighborhood_cols = 1
@@ -7,7 +7,7 @@ function [liks sigma_image sigmas] = calculate_lab_siltp_kde_likelihood_sharpeni
 %num_color_vals  = number of values each color feature can take
 %num_siltp_vals  = number of values siltp features can take
 %liks = uniform_factor*uniform_pdf + (1-uniform_factor)*kde_estimate
-%adaptive kernel variances in hybrid feature space (Narayana et. al, CVPR 2012) method
+%Combines joint domain-range kde BMVC 2012 with adaptive kernel variances in hybrid feature space (Narayana et. al, CVPR 2012) methods
 
 if ~exist('num_color_vals','var')
     num_color_vals = 256;
@@ -52,6 +52,7 @@ for LTP=sigma_LTPs
                 det_xy = sigma(1,i)*sigma(2,i);
                 uniform_sigma_inv = [1/sigma(1,i); 1/sigma(2,i)];
                 uniform_const = (det_xy^.5)*2*pi;
+                xy_const(i) = uniform_const;
                 uniform_lik = exp(-.5*(uniform_xy_diff.*uniform_xy_diff)*uniform_sigma_inv);
                 uniform_density = 1/num_color_vals/num_color_vals/num_color_vals/(num_siltp_vals^(num_siltp_resolutions));
                 uniform_contribution(i) = sum( uniform_lik)/uniform_const*uniform_density;
@@ -74,13 +75,11 @@ end
 
 %For each pixel in the image
 for i=1:num_rows*num_cols
-    
     %get the row and column number
     [r c] = get_2D_coordinates(i, num_rows, num_cols);
     %if r==num_rows && rem(c, 50)==0
     %    c
     %end
-    
     %find out the indices of the neighbors
     min_row = max(1, r-neighborhood_rows);
     max_row = min(num_rows, r+neighborhood_rows);
@@ -103,9 +102,10 @@ for i=1:num_rows*num_cols
         %current_sample_siltp_bin = dec2bin( current_sample_siltp, 8);
         current_sample_siltp_bin = dec2bin_lutable( current_sample_siltp+1, :);
         current_sample_siltp_repeat_bin = repmat( current_sample_siltp_bin, [ num_centers 1]);
+%        current_sample_siltp_repeat_bin = dec2bin( current_sample_siltp_repeat, 8);
         diff_siltp = siltp_kde_centers_reshape_bin-current_sample_siltp_repeat_bin;
-        abs_diff_siltp = sum( abs(diff_siltp), 2);
         %concatenate the siltp diff to the diff matrix
+        abs_diff_siltp = sum( abs(diff_siltp), 2);
         diff(:,siltp_res+5) = abs_diff_siltp;
     end
     
@@ -124,9 +124,23 @@ for i=1:num_rows*num_cols
     %tic 
     %multiply each sample's contribution by the mask and then sum all contributions
     lik_sum_all_sigmas = sum(lik_indiv.*true_mask_repeat, 1);
+    %fprintf('lik sum takes %f secs\n', toc);
     %tic 
-    %normalize by required constant for each sigma combination and by number of frames
-    lik_sum_all_sigmas = lik_sum_all_sigmas./const/num_model_frames;
+    %Normalize by number of frames
+    %lik_sum_all_sigmas = lik_sum_all_sigmas./const/num_model_frames;
+    %Normalize by sum of mask probabilities
+    %The line below ensures that stray singleton fg pixels with low probability dont contribute fully to the pdf
+    norm_factor = max(1, sum(true_mask_reshape) + eps(0));
+    norm_factor1 = norm_factor;
+    %The above line will hurt the performance when neighborhood is large. Pixels far away in the neighborhood contribute very little, but will be penalized by the probability of label at that location. Perhaps we should normalize by gaussian distance (in xy dimensions) of these points multiplied by probability of label there
+    %likelihood of x y distances alone
+    xy_lik = exp(-.5*(diff(:,1:2).*diff(:,1:2))*sigma_inv(1:2,:));
+    xy_const_repeat = repmat( xy_const, [num_centers 1]);
+    xy_liks_sum = xy_lik./xy_const_repeat.*true_mask_repeat;
+    norm_factor = sum( xy_liks_sum);
+    %Proper normalization, as described in BMVC 2012
+    lik_sum_all_sigmas = lik_sum_all_sigmas./const./norm_factor;
+    
     %fprintf('lik sum const takes %f secs\n', toc);
     %tic 
     %Find the covariance that results in highest likelihood
@@ -137,5 +151,4 @@ for i=1:num_rows*num_cols
     liks(r,c) = (uniform_factor*uniform_contribution(max_sigma_index)) + (1-uniform_factor)*lik_sum_max_sigma;
     %save the covariance index also
     sigma_image( r,c) = max_sigma_index;
-
 end

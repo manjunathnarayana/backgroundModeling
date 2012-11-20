@@ -4,7 +4,7 @@ function [bg_mask fg_mask] = classify_using_kde_sharpening_sigma_cvpr( img_pixel
 %Function that classifies pixels as bg/fg based on the kde point samples in bg_model, fg_model and obj_model
 %img_pixels is the r x c x d representation of pixels in the image
 %bg_model and fg_model are k x r x c x d in size where k = number of frames for which the model is being kept, r is number of rows in the image, c is number of columns in the image, and d is the number of dimensions of the kernel
-%the indicator matrices identify which pixels in each frame are valid bg/fg/object pixels
+%the indicator matrices identify which pixels in each frame are valid bg/fg pixels in a soft manner
 %the covariance matrix (sigma) and priors for each class are also input to the function
 %the near_rows and near_cols denote how much on each side of the pixel must be considered as neighborhood for kde samples
 %fg_uniform_factor is the factor which includes a uniform distribution in the fg model. ( There is no other way to include a uniform distribution using kde samples). p(x|fg) = fg_uniform_factor*uniform_pdf + (1-fg_uniform_factor)*fg_kde_estimate

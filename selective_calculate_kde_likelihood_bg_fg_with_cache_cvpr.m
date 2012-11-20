@@ -1,7 +1,9 @@
 function [selection_map bg_liks bg_sigma_image fg_liks fg_sigma_image] = selective_calculate_kde_likelihood_bg_fg_with_cache_cvpr( pixel_samples, bg_model, bg_indicator, prev_bg_sigma_image, bg_sigma_XYs, bg_sigma_Ys, bg_sigma_UVs, bg_neighborhood_rows, bg_neighborhood_cols, bg_uniform_factor, fg_model, fg_indicator, prev_fg_sigma_image, fg_sigma_XYs, fg_sigma_Ys, fg_sigma_UVs, fg_neighborhood_rows, fg_neighborhood_cols, fg_uniform_factor, num_vals, debug_flag)
 %function [selection_map bg_liks bg_sigma_image fg_liks fg_sigma_image] = selective_calculate_kde_likelihood_bg_fg_with_cache_cvpr( pixel_samples, bg_model, bg_indicator, prev_bg_sigma_image, bg_sigma_XYs, bg_sigma_Ys, bg_sigma_UVs, bg_neighborhood_rows, bg_neighborhood_cols, bg_uniform_factor, fg_model, fg_indicator, prev_fg_sigma_image, fg_sigma_XYs, fg_sigma_Ys, fg_sigma_UVs, fg_neighborhood_rows, fg_neighborhood_cols, fg_uniform_factor, num_vals, debug_flag)
-%function that returns the bg and fg likelihoods of the pixel_samples under prev sigma values. Only in pixels where the bg and fg likelihoods are greater than a factor apart are they set to the values based on old sigma. The entire neighborhood is used to calculate the pixel likelhood under bg and fg models (and not simply using only the center pixel value as in selective_calculate_kde_likelihood_bg_fg function). In pixels where the difference is less than factor, this function will not set the likelihoods based on old sigmas. It is upto another function to set these values using a sharpening sigma procedure. Call selective_calculate_kde_likelihood_sharpening after this function is called to calculate the likelihoods at these pixels.
-%indicator shows which pixels in the model belong to this process and which dont. Only pixels that have corresponding indicator value of 1 are added up in the kde equation. sigma is the input covariance matrix
+%function that returns the bg and fg likelihoods of the pixel_samples under prev sigma values. Only in pixels where the bg and fg likelihoods are greater than a factor apart are they set to the values based on old sigma. 
+%In pixels where the difference is less than factor, this function will not set the likelihoods based on old sigmas. It is upto another function to set these values using a sharpening sigma procedure. Call selective_calculate_kde_likelihood_sharpening after this function is called to calculate the likelihoods at these pixels.
+%indicator shows (in a soft manner) which pixels in the model belong to this process and which dont. indicator values are used as a weight for each sample in the kde likelihood calculation
+%the covariance values (sigma) and priors for each class are also input to the function
 %Both pixel_samples are of size r x c x d. model is of size k x r x c x d. indicator is of size k x r x c. sigma is d x d in size
 %neighborhood_rows and neighborhood_cols denote the number of pixels to consider on each side as neighbors. A 3x3 neighborhood is defined by neighborhood_rows = neighborhood_cols = 1
 %prev_sigma_image is the image of indices of sigma values from the previous frame
@@ -27,8 +29,7 @@ end
 
 num_rows = size( pixel_samples, 1);
 num_cols = size( pixel_samples, 2);
-num_dims = size(pixel_samples, 3);
-
+num_dims = size(pixel_samples, 3); 
 %Compute a covariance matrix from the covariances (sigmas) given
 %Compute the uniform likelihood that results from the given spatial neighborhood
 %and given covariance values
@@ -139,6 +140,7 @@ for i=1:num_rows*num_cols
         bg_const_current = bg_const( bg_sigma_index);
         %Compute un-normalized kde likelihood
         bg_lik_indiv = exp(-.5*(bg_diff.*bg_diff)*bg_sigma_inv_current);
+        %multiply each sample's contribution by bg mask and then sum all contributions
         bg_lik_sum = sum(bg_lik_indiv.*bg_true_mask_reshape);
         %normalize by required constant for bg sigma and by number of frames
         bg_lik_sum_norm = bg_lik_sum/bg_const_current/num_bg_model_frames;

@@ -1,14 +1,14 @@
 function [bg_mask fg_mask] = classify_using_kde_sharpening_sigma_3_classes( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, num_feature_vals, debug_flag)
 %function [bg_mask fg_mask] = classify_using_kde_sharpening_sigma_3_classes( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, num_feature_vals, debug_flag)
 %Function that classifies pixels as bg/fg/new fg based on the kde point samples in bg_model and fg_model
-%Prior set to [.98 .01 .01]p(bg) + [.50 .25 .25](1-p(bg_) or a threshold based choice of one of the two
 % img_pixels is the r x c x d representation of pixels in the image
 %bg_model and fg_model are k x r x c x d in size where k = number of frames for which the model is being kept, r is number of rows in the image, c is number of columns in the image, and d is the number of dimensions of the kernel
-%the indicator matrices identify which pixels in each frame are valid bg/fg/object pixels
-%the covariance values sigma and priors for each class are also input to the function
+%the indicator matrices identify which pixels in each frame are valid bg/fg pixels in a soft manner
+%the covariance values (sigma) and priors for each class are also input to the function. Note that fg_prior is not used. bg_prior is used to decide priors for the three processes.
 %the near_rows and near_cols denote how much on each side of the pixel must be considered as neighborhood for kde samples
 %num_feature_vals = number of values the features (like color or intensity) can take -- this is used in generating the uniform distributions for likelihood
 %bg_sigmas, fg_sigmas are cells that have candidate sigma values for XY, R (or L), and GB (or AB) dimensions
+%Prior for bg fg newfg set to [.98 .01 .01]p(bg) + [.50 .25 .25](1-p(bg)) or a threshold based choice of one of the two
 
 %debug_flag = 1;
 temp_bg_model = bg_model{1};
@@ -68,7 +68,7 @@ new_prior_3 = (bg_prior_smoothed*confident_bg_priors(3)) + ((1-bg_prior_smoothed
 bg_liks_prior = bg_liks_combined.*bg_prior_3;
 fg_liks_prior = fg_liks_combined.*fg_prior_3;
 new_liks_prior = (1/num_feature_vals/num_feature_vals/num_feature_vals).*new_prior_3;
-%Use prior values
+%Compute masks
 bg_mask = bg_liks_prior./(bg_liks_prior+fg_liks_prior+new_liks_prior);
 fg_mask = fg_liks_prior./(bg_liks_prior+fg_liks_prior+new_liks_prior);
 new_mask = new_liks_prior./(bg_liks_prior+fg_liks_prior+new_liks_prior);
