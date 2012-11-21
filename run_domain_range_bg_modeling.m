@@ -59,7 +59,7 @@ for video_number = video_numbers
     %(4) Ihler code for kernel variance calculation (AMISE criterion in CVPR 2012 paper)
     %(5) knn distance as variance - undocumented algorithm that uses the distance of the estimation point to the k-th nearest neighbor among the kde samples as variance
     %(6) use variance learned from first few frames (no adaptive kernel variance after that)
-    algorithm_to_use = 1;
+    algorithm_to_use = 3;
 
     %Call load video script
     load_video
@@ -89,7 +89,7 @@ for video_number = video_numbers
     
     %Formulate as a three class problem - bg v/s seen foreground v/s new foreground
     %Must be set to 1 for BMVC 2012 results
-    use_bg_fg_new_classes = 0;
+    use_bg_fg_new_classes = 1;
 
     %Suboptions for each algorithm
     %For all algorithms
@@ -465,7 +465,7 @@ for video_number = video_numbers
         %For BMVC 2012 results
         if algorithm_to_use == 3
             if use_bg_fg_new_classes == 1
-                [bg_mask fg_mask] = classify_using_kde_sharpening_sigma_Sheikh_normalization( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
+                [bg_mask fg_mask] = classify_using_kde_sharpening_sigma_Sheikh_normalization( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, num_feature_vals, 0 );
             else
                 error('Error - Sheikh Shah normalization without 3 classes not implemented yet');
             end

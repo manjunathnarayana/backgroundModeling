@@ -1,13 +1,12 @@
-function [liks sigma_image sigmas] = calculate_kde_likelihood_sharpening( pixel_samples, model, indicator, sigma_XYs, sigma_Ys, sigma_UVs, neighborhood_rows, neighborhood_cols, uniform_factor, num_vals, debug_flag)
-%function [liks sigma_image sigmas] = calculate_kde_likelihood_sharpening( pixel_samples, model, indicator, sigma_XYs, sigma_Ys, sigma_UVs, neighborhood_rows, neighborhood_cols, uniform_factor, num_vals, debug_flag)
+function [liks sigma_image sigmas] = calculate_kde_likelihood_sharpening_Sheikh_normalization( pixel_samples, model, indicator, sigma_XYs, sigma_Ys, sigma_UVs, neighborhood_rows, neighborhood_cols, uniform_factor, num_vals, debug_flag)
+%function [liks sigma_image sigmas] = calculate_kde_likelihood_sharpening_Sheikh_normalization( pixel_samples, model, indicator, sigma_XYs, sigma_Ys, sigma_UVs, neighborhood_rows, neighborhood_cols, uniform_factor, num_vals, debug_flag)
 %function that returns the likelihoods of the pixel_samples under given model. indicator shows (in a soft manner) which pixels in the model belong to this process and which dont. indicator values are used as a weight for each sample in the kde likelihood calculation
 %Both pixel_samples are of size r x c x d. model is of size k x r x c x d. indicator is of size k x r x c. sigma is d x d in size
 %neighborhood_rows and neighborhood_cols denote the number of pixels to consider on each side as neighbors. A 3x3 neighborhood is defined by neighborhood_rows = neighborhood_cols = 1
 %uniform_factor basically is the weight of a uniform distribution mixed to the kde estimate
 %num_vals  = number of values each dimension can take
 %liks = uniform_factor*uniform_pdf + (1-uniform_factor)*kde_estimate
-%function returns likelihoods in liks and the covariance values (indexes) used in the
-%adaptive kernel variances (Narayana et. al, CVPR 2012)
+%Weighting is done as per Sheikh and Shah procedure -- normalize by sum of mask probabilities, without taking their spatial influence into account
 
 if ~exist('num_vals','var')
     num_vals = 256;
@@ -43,10 +42,12 @@ for Y=sigma_Ys
             det_xy = sigma(1,i)*sigma(2,i);
             uniform_sigma_inv = [1/sigma(1,i); 1/sigma(2,i)];
             uniform_const = (det_xy^.5)*2*pi;
-            %Save the constant for later use in normalization (when normalizing depending on distance of each sample from center)
+            %Save the constant for potential later use in normalization (when normalizing depending on distance of each sample from center)
             xy_const(i) = uniform_const;
             uniform_lik = exp(-.5*(uniform_xy_diff.*uniform_xy_diff)*uniform_sigma_inv);
-            uniform_density = 1/num_vals/num_vals/num_vals;
+            %uniform_density = 1/200/30/30;
+            uniform_density = 1/100/100/100;
+            %uniform_density = 1/256/256/256;
             uniform_contribution(i) = sum( uniform_lik)/uniform_const*uniform_density;
         end
     end
@@ -66,7 +67,6 @@ end
 
 %For each pixel in the image
 for i=1:num_rows*num_cols
-    
     %get the row and column number
     [r c] = get_2D_coordinates(i, num_rows, num_cols);
     %if r==num_rows && rem(c, 50)==0
@@ -91,9 +91,8 @@ for i=1:num_rows*num_cols
     true_mask_reshape = reshape(true_mask, [num_centers 1]);
     true_mask_repeat = repmat(true_mask_reshape, [1 num_sigmas]);
 
-    %lik = exp(-.5*sum((diff*inv(sigma)).*diff, 2));
-    
     %Compute un-normalized kde likelihood
+    %lik = exp(-.5*sum((diff*inv(sigma)).*diff, 2));
     %Optimization for diagonal sigma
     %tic 
     lik_indiv = exp(-.5*(diff.*diff)*sigma_inv);
@@ -103,23 +102,13 @@ for i=1:num_rows*num_cols
     lik_sum_all_sigmas = sum(lik_indiv.*true_mask_repeat, 1);
     %fprintf('lik sum takes %f secs\n', toc);
     %tic 
-    %Various normalization schemes possible - Comment out the desired model
-
-    %Uncomment below to normalize by number of frames in model - CVPR 2012 model
-    %lik_sum_all_sigmas = lik_sum_all_sigmas./const/num_model_frames;
+    
     %Normalize by sum of mask probabilities
-    %lik_sum_all_sigmas = lik_sum_all_sigmas./const/(sum(true_mask_reshape)+eps(0));
+    %This is the Sheikh and Shah extension to probabilistic data points
+    lik_sum_all_sigmas = lik_sum_all_sigmas./const/(sum(true_mask_reshape)+eps(0));
     %fprintf('lik sum const takes %f secs\n', toc);
     %tic 
-    %The above line will hurt the performance when neighborhood is large. Pixels far away in the neighborhood contribute very little, but will be penalized by the probability of label at that location. Hence, we should normalize by gaussian distance (in xy dimensions) of these points multiplied by probability of label there
-    %likelihood of x y distances alone
-    xy_lik = exp(-.5*(diff(:,1:2).*diff(:,1:2))*sigma_inv(1:2,:));
-    xy_const_repeat = repmat( xy_const, [num_centers 1]);
-    xy_liks_sum = xy_lik./xy_const_repeat.*true_mask_repeat;
-    norm_factor = sum( xy_liks_sum);
-    %Proper normalization, as described in BMVC 2012
-    lik_sum_all_sigmas = lik_sum_all_sigmas./const./norm_factor;
-
+ 
     %Find the covariance that results in highest likelihood
     [lik_sum_max_sigma max_sigma_index] = max( lik_sum_all_sigmas);
     %fprintf('lik sum max takes %f secs\n', toc);
@@ -128,19 +117,4 @@ for i=1:num_rows*num_cols
     liks(r,c) = (uniform_factor*uniform_contribution(max_sigma_index)) + (1-uniform_factor)*lik_sum_max_sigma;
     %save the covariance index also
     sigma_image( r,c) = max_sigma_index;
-
-    %if liks(r,c)>1
-    %    disp('in calc kde lik lik is greater than 1');
-    %    keyboard;
-    %end
-
-    if(isnan(liks(r,c)))
-        liks(r,c) = 0;
-    end
-
-    debug_flag = 0;
-    if (r==36 && c==57 && debug_flag==1)
-        disp('in calculate_kde_likelihood');
-        keyboard;
-    end
 end
