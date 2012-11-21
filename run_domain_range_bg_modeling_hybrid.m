@@ -89,7 +89,7 @@ for video_number = video_numbers
     
     %Formulate as a three class problem - bg v/s seen foreground v/s new foreground
     %Must be set to 1 for BMVC 2012 results
-    use_bg_fg_new_classes = 1;
+    use_bg_fg_new_classes = 0;
     
     %Suboptions for each algorithm
     %For all algorithms
@@ -121,7 +121,7 @@ for video_number = video_numbers
     
     %Cache method from CVPR 2012 paper
     %this uses center pixel + neighborhood values to decide bg fg lik
-    use_efficient_sigma_cache = 1;
+    use_efficient_sigma_cache = 0;
     if use_efficient_sigma_cache==1
         bg_sigma_images_old = cell(1, num_resolutions);
         fg_sigma_images_old = cell(1, num_resolutions);
@@ -247,16 +247,23 @@ for video_number = video_numbers
         bg_frame_num = bg_frame_num+1;
     end
     
-    %TODO- Why is bsr important
+    %Prior values for various algorithms
+
     if algorithm_to_use == 1
-        bg_prior = ones( num_rows, num_cols)*.98;
-        boundary_region_size = 10;
-        bsr = boundary_region_size;
-        bg_prior(1:bsr,:) = 0;
-        bg_prior(end-bsr+1:end,:) = 0;
-        bg_prior(:,1:bsr) = 0;
-        bg_prior(:, end-bsr+1:end) = 0;
-        fg_prior = 1-bg_prior;
+        %When using bg_fg_new_classes, initially the center region has .98 confidence for bg. The image boundary region has 0 confidence for bg. This is used to arrive at bg, fg, and new priors in the confident and not-confident regions as described in BMVC 2012
+        if use_bg_fg_new_classes == 1   
+            bg_prior = ones( num_rows, num_cols)*.98;
+            boundary_region_size = 10;
+            bsr = boundary_region_size;
+            bg_prior(1:bsr,:) = 0;
+            bg_prior(end-bsr+1:end,:) = 0;
+            bg_prior(:,1:bsr) = 0;
+            bg_prior(:, end-bsr+1:end) = 0;
+            fg_prior = 1-bg_prior;
+        else
+            bg_prior = ones( num_rows, num_cols)*.98;
+            fg_prior = ones( num_rows, num_cols)*.02;
+        end
     elseif algorithm_to_use == 2
         bg_prior = ones( num_rows, num_cols)*.5;
         fg_prior = ones( num_rows, num_cols)*.5;
@@ -264,8 +271,8 @@ for video_number = video_numbers
         bg_prior = ones( num_rows, num_cols)*.5;
         fg_prior = ones( num_rows, num_cols)*.5;
     else
-        bg_prior = ones( num_rows, num_cols)*.99;
-        fg_prior = ones( num_rows, num_cols)*.01;
+        bg_prior = ones( num_rows, num_cols)*.5;
+        fg_prior = ones( num_rows, num_cols)*.5;
     end
     
     %Initialize bg and fg masks
@@ -523,7 +530,22 @@ for video_number = video_numbers
             end 
         end
 
-        %CVPR 2012 algorithm
+        %BMVC 2012 algorithm - Joint domain-range with improvements, with adaptive kernel selection
+        if algorithm_to_use == 1
+            if use_bg_fg_new_classes == 1
+                [bg_mask fg_mask] = classify_lab_siltp_using_kde_sharpening_sigma_3_classes( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_near_rows, fg_near_cols, num_color_feature_vals, num_siltp_feature_vals, 0 );
+            else
+                if use_efficient_sigma_cache
+                    [bg_mask fg_mask bg_sigma_images fg_sigma_images] = classify_using_lab_siltp_kde_sharpening_sigma_with_cache( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_sigma_images_old, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_sigma_images_old, fg_near_rows, fg_near_cols, fg_uniform_factor, num_color_feature_vals, num_siltp_feature_vals, 0 );
+                    bg_sigma_images_old = bg_sigma_images;
+                    fg_sigma_images_old = fg_sigma_images;
+                else
+                    [bg_mask fg_mask] = classify_lab_siltp_using_kde_sharpening_sigma( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, fg_uniform_factor, num_color_feature_vals, num_siltp_feature_vals, 0 );
+                end
+            end
+                    
+        end
+         %CVPR 2012 algorithm
         if algorithm_to_use == 2
             if use_bg_fg_new_classes ~=0
                 fprintf('For CVPR 2012 algorithm, use_bg_fg_new_classes should be set to 1\n');
@@ -550,16 +572,7 @@ for video_number = video_numbers
             end
         end
          
-        %BMVC 2012 algorithm - Joint domain-range with improvements, with adaptive kernel selection
-        if algorithm_to_use == 1
-            if use_bg_fg_new_classes == 1
-                [bg_mask fg_mask] = classify_lab_siltp_using_kde_sharpening_sigma_3_classes( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_near_rows, fg_near_cols, num_color_feature_vals, num_siltp_feature_vals, 0 );
-            else
-                error('Error - No alternative procedure here');
-            end
-                    
-        end
-        %Sheikh-Shah method (our implementation) Joint domain-range modeling
+       %Sheikh-Shah method (our implementation) Joint domain-range modeling
         %For BMVC 2012 results
         if algorithm_to_use == 3
             if use_bg_fg_new_classes == 1

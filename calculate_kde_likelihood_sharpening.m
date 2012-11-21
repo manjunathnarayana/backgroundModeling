@@ -44,6 +44,7 @@ for Y=sigma_Ys
             det_xy = sigma(1,i)*sigma(2,i);
             uniform_sigma_inv = [1/sigma(1,i); 1/sigma(2,i)];
             uniform_const = (det_xy^.5)*2*pi;
+            %Save the constant for later use in normalization (when normalizing depending on distance of each sample from center)
             xy_const(i) = uniform_const;
             uniform_lik = exp(-.5*(uniform_xy_diff.*uniform_xy_diff)*uniform_sigma_inv);
             uniform_density = 1/num_vals/num_vals/num_vals;
@@ -105,7 +106,7 @@ for i=1:num_rows*num_cols
     %tic 
     %Various normalization schemes possible - Comment out the desired model
 
-    %Normalize by number of frames in model
+    %Uncomment below to normalize by number of frames in model - CVPR 2012 model
     %lik_sum_all_sigmas = lik_sum_all_sigmas./const/num_model_frames;
     %Normalize by sum of mask probabilities
     %lik_sum_all_sigmas = lik_sum_all_sigmas./const/(sum(true_mask_reshape)+eps(0));

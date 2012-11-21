@@ -1,7 +1,7 @@
 function [bg_mask fg_mask bg_sigmas_image fg_sigmas_image] = classify_using_kde_sharpening_sigma_with_cache( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, prev_bg_sigma_images, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, prev_fg_sigma_images, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, debug_flag)
 %function [bg_mask fg_mask bg_sigmas_image fg_sigmas_image] = classify_using_kde_sharpening_sigma_with_cache( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, prev_bg_sigma_images, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, prev_fg_sigma_images, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, debug_flag)
 %Function that classifies frames as bg/fg with kde likelihoods, but uses cached covariance values from previous frame where possible. Adaptive kernel variance is performed only in required pixels
-%This is CVPR 2012 (Narayana et. al) code -- normalizing by number of frames, using uniform fg factor
+%This is BMVC 2012 (Narayana et. al) code -- normalizing by number of frames, using uniform fg factor
 %Function that classifies pixels as bg/fg based on the kde point samples in bg_model and fg_model
 %img_pixels is the r x c x d representation of pixels in the image
 %bg_model and fg_model are k x r x c x d in size where k = number of frames for which the model is being kept, r is number of rows in the image, c is number of columns in the image, and d is the number of dimensions of the kernel

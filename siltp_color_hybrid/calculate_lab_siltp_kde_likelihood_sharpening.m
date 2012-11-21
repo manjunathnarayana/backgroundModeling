@@ -126,12 +126,8 @@ for i=1:num_rows*num_cols
     lik_sum_all_sigmas = sum(lik_indiv.*true_mask_repeat, 1);
     %fprintf('lik sum takes %f secs\n', toc);
     %tic 
-    %Normalize by number of frames
+    %Normalize by number of frames - Uncomment line below to normalize using CVPR 2012 method
     %lik_sum_all_sigmas = lik_sum_all_sigmas./const/num_model_frames;
-    %Normalize by sum of mask probabilities
-    %The line below ensures that stray singleton fg pixels with low probability dont contribute fully to the pdf
-    norm_factor = max(1, sum(true_mask_reshape) + eps(0));
-    norm_factor1 = norm_factor;
     %The above line will hurt the performance when neighborhood is large. Pixels far away in the neighborhood contribute very little, but will be penalized by the probability of label at that location. Perhaps we should normalize by gaussian distance (in xy dimensions) of these points multiplied by probability of label there
     %likelihood of x y distances alone
     xy_lik = exp(-.5*(diff(:,1:2).*diff(:,1:2))*sigma_inv(1:2,:));

@@ -59,7 +59,7 @@ for video_number = video_numbers
     %(4) Ihler code for kernel variance calculation (AMISE criterion in CVPR 2012 paper)
     %(5) knn distance as variance - undocumented algorithm that uses the distance of the estimation point to the k-th nearest neighbor among the kde samples as variance
     %(6) use variance learned from first few frames (no adaptive kernel variance after that)
-    algorithm_to_use = 2;
+    algorithm_to_use = 1;
 
     %Call load video script
     load_video
@@ -118,7 +118,7 @@ for video_number = video_numbers
 
     %Cache method from CVPR 2012 paper
     %this uses center pixel + neighborhood values to decide bg fg lik
-    use_efficient_sigma_cache = 1;
+    use_efficient_sigma_cache = 0;
     if use_efficient_sigma_cache==1
         bg_sigma_images_old = cell(1, num_resolutions);
         fg_sigma_images_old = cell(1, num_resolutions);
@@ -190,16 +190,23 @@ for video_number = video_numbers
         bg_frame_num = bg_frame_num+1;
     end
   
-    %TODO- Why is bsr important
+    %Prior values for various algorithms
+
     if algorithm_to_use == 1
-        bg_prior = ones( num_rows, num_cols)*.98;
-        boundary_region_size = 10;
-        bsr = boundary_region_size;
-        bg_prior(1:bsr,:) = 0;
-        bg_prior(end-bsr+1:end,:) = 0;
-        bg_prior(:,1:bsr) = 0;
-        bg_prior(:, end-bsr+1:end) = 0;
-        fg_prior = 1-bg_prior;
+        %When using bg_fg_new_classes, initially the center region has .98 confidence for bg. The image boundary region has 0 confidence for bg. This is used to arrive at bg, fg, and new priors in the confident and not-confident regions as described in BMVC 2012
+        if use_bg_fg_new_classes == 1   
+            bg_prior = ones( num_rows, num_cols)*.98;
+            boundary_region_size = 10;
+            bsr = boundary_region_size;
+            bg_prior(1:bsr,:) = 0;
+            bg_prior(end-bsr+1:end,:) = 0;
+            bg_prior(:,1:bsr) = 0;
+            bg_prior(:, end-bsr+1:end) = 0;
+            fg_prior = 1-bg_prior;
+        else
+            bg_prior = ones( num_rows, num_cols)*.98;
+            fg_prior = ones( num_rows, num_cols)*.02;
+        end
     elseif algorithm_to_use == 2
         bg_prior = ones( num_rows, num_cols)*.5;
         fg_prior = ones( num_rows, num_cols)*.5;
@@ -207,8 +214,8 @@ for video_number = video_numbers
         bg_prior = ones( num_rows, num_cols)*.5;
         fg_prior = ones( num_rows, num_cols)*.5;
     else
-        bg_prior = ones( num_rows, num_cols)*.99;
-        fg_prior = ones( num_rows, num_cols)*.01;
+        bg_prior = ones( num_rows, num_cols)*.5;
+        fg_prior = ones( num_rows, num_cols)*.5;
     end
    
     %Initialize bg and fg masks
@@ -415,16 +422,22 @@ for video_number = video_numbers
             end
         end
 
-        %Computing variance using distance to k-th nearest neighbor
-        if algorithm_to_use == 5
-            if use_bg_fg_new_classes
-                [bg_mask fg_mask] = classify_using_kde_knn_distance_as_sigma_3_classes( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, fg_uniform_factor, objects, object_sigmas, object_near_rows, object_near_cols, k_th_neighbor, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
+        %BMVC 2012 algorithm - Joint domain-range with improvements, with adaptive kernel selection
+        if algorithm_to_use == 1
+            if use_bg_fg_new_classes == 1
+                [bg_mask fg_mask] = classify_using_kde_sharpening_sigma_3_classes( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, num_feature_vals, 0 );
             else
-                [bg_mask fg_mask] = classify_using_kde_knn_distance_as_sigma( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, fg_uniform_factor, objects, object_sigmas, object_near_rows, object_near_cols, k_th_neighbor, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
+                if use_efficient_sigma_cache == 1
+                    [bg_mask fg_mask bg_sigma_images fg_sigma_images] = classify_using_kde_sharpening_sigma_with_cache( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_sigma_images_old, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_sigma_images_old, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, 0 );
+                    bg_sigma_images_old = bg_sigma_images;
+                    fg_sigma_images_old = fg_sigma_images;
+                else
+                    [bg_mask fg_mask] = classify_using_kde_sharpening_sigma( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, fg_uniform_factor, num_feature_vals, 0 );
+                end
             end
         end
-
-        %CVPR 2012 algorithm
+        
+         %CVPR 2012 algorithm
         if algorithm_to_use == 2
             if use_bg_fg_new_classes ~=0
                 fprintf('For CVPR 2012 algorithm, use_bg_fg_new_classes should be set to 1\n');
@@ -448,6 +461,16 @@ for video_number = video_numbers
             end
         end
 
+       %Sheikh-Shah method (our implementation) Joint domain-range modeling
+        %For BMVC 2012 results
+        if algorithm_to_use == 3
+            if use_bg_fg_new_classes == 1
+                [bg_mask fg_mask] = classify_using_kde_sharpening_sigma_Sheikh_normalization( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
+            else
+                error('Error - Sheikh Shah normalization without 3 classes not implemented yet');
+            end
+        end
+
         %Classic variance selection algorithms (AMISE)
         if algorithm_to_use == 4
             if use_bg_fg_new_classes %if use_ihler_code TODO which of these two are to be used? Also remove reference to ihler in function names. Credit Ihler in your documentation
@@ -457,29 +480,20 @@ for video_number = video_numbers
                 [bg_mask fg_mask] = classify_using_ihler_sharpening_sigma( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, fg_uniform_factor, objects, object_near_rows, object_near_cols, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
             end
         end
+
+        %Computing variance using distance to k-th nearest neighbor
+        if algorithm_to_use == 5
+            if use_bg_fg_new_classes
+                [bg_mask fg_mask] = classify_using_kde_knn_distance_as_sigma_3_classes( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, fg_uniform_factor, objects, object_sigmas, object_near_rows, object_near_cols, k_th_neighbor, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
+            else
+                [bg_mask fg_mask] = classify_using_kde_knn_distance_as_sigma( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, fg_uniform_factor, objects, object_sigmas, object_near_rows, object_near_cols, k_th_neighbor, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
+            end
+        end
+
           
         %Compute the best variance only from the first few frames. No adaptive variance selection after that
         if algorithm_to_use == 6
             [bg_mask fg_mask] = classify_using_kde_learned_bg_sigmas_3_classes( img_pixels, bg_model, bg_indicator, bg_sigma_values, optimal_bg_sigma_indexes, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
-        end
-
-        %BMVC 2012 algorithm - Joint domain-range with improvements, with adaptive kernel selection
-        if algorithm_to_use == 1
-            if use_bg_fg_new_classes == 1
-                [bg_mask fg_mask] = classify_using_kde_sharpening_sigma_3_classes( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, num_feature_vals, 0 );
-            else
-                error('Error - No alternative procedure here');
-            end
-        end
-        
-        %Sheikh-Shah method (our implementation) Joint domain-range modeling
-        %For BMVC 2012 results
-        if algorithm_to_use == 3
-            if use_bg_fg_new_classes == 1
-                [bg_mask fg_mask] = classify_using_kde_sharpening_sigma_Sheikh_normalization( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
-            else
-                error('Error - Sheikh Shah normalization without 3 classes not implemented yet');
-            end
         end
 
         if algorithm_to_use > 6 || algorithm_to_use <1
@@ -514,7 +528,9 @@ for video_number = video_numbers
         %If using BMVC algorithm, the posterior probability of bg/fg becomes the
         %prior for the current frame
         %For CVPR algorithm, the prior is kept unchanged (uniform equal priors for bg and fg)
-        if use_bg_fg_new_classes
+        
+        %Use the mask values as new priors if flag is set
+        if use_bg_fg_new_classes == 1
             bg_prior = bg_mask;
             fg_prior = 1-bg_mask;
         end

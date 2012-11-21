@@ -1,18 +1,20 @@
-function [liks sigma_image sigmas] = selective_calculate_kde_likelihood_sharpening( pixel_samples, model, indicator, selection_map, selection_liks, selection_sigma_image, sigma_XYs, sigma_Ys, sigma_UVs, neighborhood_rows, neighborhood_cols, uniform_factor, num_vals, debug_flag)
-%function [liks sigma_image sigmas] = selective_calculate_kde_likelihood_sharpening( pixel_samples, model, indicator, selection_map, selection_liks, selection_sigma_image, sigma_XYs, sigma_Ys, sigma_UVs, neighborhood_rows, neighborhood_cols, uniform_factor, num_vals, debug_flag)
+function [liks sigma_image sigmas] = selective_calculate_lab_siltp_kde_likelihood_sharpening_cvpr( pixel_samples, model, indicator, selection_map, selection_liks, selection_sigma_image, sigma_XYs, sigma_Ls, sigma_ABs, sigma_LTPs, neighborhood_rows, neighborhood_cols, uniform_factor, num_color_vals, num_siltp_vals, debug_flag)
+%function [liks sigma_image sigmas] = selective_calculate_lab_siltp_kde_likelihood_sharpening_cvpr( pixel_samples, model, indicator, selection_map, selection_liks, selection_sigma_image, sigma_XYs, sigma_Ls, sigma_ABs, sigma_LTPs, neighborhood_rows, neighborhood_cols, uniform_factor, num_color_vals, num_siltp_vals, debug_flag)
 %function that returns the likelihoods of the pixel_samples under given model, but only for pixels where selection_map is 0. Where selection_map is 1, the liks are set to whatever the value in selection_liks is. sigma_image is set to selection_sigma_image value at these pixels
 %indicator shows (in a soft manner) which pixels in the model belong to this process and which dont. indicator values are used as a weight for each sample in the kde likelihood calculation
 %the covariance values (sigma) and priors for each class are also input to the function
 %Both pixel_samples are of size r x c x d. model is of size k x r x c x d. indicator is of size k x r x c. sigma is d x d in size
 %neighborhood_rows and neighborhood_cols denote the number of pixels to consider on each side as neighbors. A 3x3 neighborhood is defined by neighborhood_rows = neighborhood_cols = 1
 %uniform_factor basically is the weight of a uniform distribution mixed to the kde estimate
-%num_vals  = number of values each dimension can take
+%num_color_vals  = number of values each color feature can take
+%num_siltp_vals  = number of values siltp features can take
 %liks = uniform_factor*uniform_pdf + (1-uniform_factor)*kde_estimate
-%function returns likelihoods in liks and the covariance values (indexes) used in the
-%adaptive kernel variances (Narayana et. al, CVPR 2012) method
 
-if ~exist('num_vals','var')
-    num_vals = 256;
+if ~exist('num_color_vals','var')
+    num_color_vals = 256;
+end
+if ~exist('num_siltp_vals','var')
+    num_siltp_vals = 81;
 end
 if ~exist('debug_flag', 'var')
     debug_flag = 0;
@@ -22,38 +24,44 @@ num_rows = size( pixel_samples, 1);
 num_cols = size( pixel_samples, 2);
 num_model_frames = size( model, 1);
 num_dims = size(pixel_samples, 3);
+num_siltp_resolutions = num_dims-5;
+
+%Calculate the dec2binary lookup table so that dec2bin() is not called repeatedly
+dec2bin_lutable = dec2bin([0:255],  8);
 
 %Compute a covariance matrix from the covariances (sigmas) given
 %Compute the uniform likelihood that results from the given spatial neighborhood
 %and given covariance values
 
 i=0;
-for Y=sigma_Ys
-    for  UV = sigma_UVs
-        for XY = sigma_XYs
-            i = i+1;
-            sigma(:,i) = [ XY XY Y UV UV]';
-            sigma_inv(:,i) = 1./sigma(:,i);
-            det_s = prod(sigma(:,i));
-            const(i) = (det_s^.5)*((2*pi)^(num_dims/2));
+for LTP=sigma_LTPs
+    for AB = sigma_ABs
+        for L = sigma_Ls
+            for XY = sigma_XYs
+                i = i+1;
+                sigma(1:5,i) = [ XY XY L AB AB]';
+                sigma(6:num_dims,i) = LTP;
+                sigma_inv(:,i) = 1./sigma(:,i);
+                det_s = prod(sigma(:,i));
+                const(i) = (det_s^.5)*((2*pi)^(num_dims/2));
 
-            %Uniform distribution for this sigma
-            [dx dy] = meshgrid(-neighborhood_cols:neighborhood_cols,-neighborhood_rows:neighborhood_rows);
-            uniform_xy_diff = [];
-            uniform_xy_diff(:,1) = dx(:);
-            uniform_xy_diff(:,2) = dy(:);
-            det_xy = sigma(1,i)*sigma(2,i);
-            uniform_sigma_inv = [1/sigma(1,i); 1/sigma(2,i)];
-            uniform_const = (det_xy^.5)*2*pi;
-            %Save the constant for later use in normalization (when normalizing depending on distance of each sample from center)
-            xy_const(i) = uniform_const;
-            uniform_lik = exp(-.5*(uniform_xy_diff.*uniform_xy_diff)*uniform_sigma_inv);
-            uniform_density = 1/num_vals/num_vals/num_vals;
-            uniform_contribution(i) = sum( uniform_lik)/uniform_const*uniform_density;
-        end
+                %Uniform distribution for this sigma
+                [dx dy] = meshgrid(-neighborhood_cols:neighborhood_cols,-neighborhood_rows:neighborhood_rows);
+                uniform_xy_diff = [];
+                uniform_xy_diff(:,1) = dx(:);
+                uniform_xy_diff(:,2) = dy(:);
+                det_xy = sigma(1,i)*sigma(2,i);
+                uniform_sigma_inv = [1/sigma(1,i); 1/sigma(2,i)];
+                uniform_const = (det_xy^.5)*2*pi;
+                %Save the constant for later use in normalization (when normalizing depending on distance of each sample from center)
+                xy_const(i) = uniform_const;
+                uniform_lik = exp(-.5*(uniform_xy_diff.*uniform_xy_diff)*uniform_sigma_inv);
+                uniform_density = 1/num_color_vals/num_color_vals/num_color_vals/(num_siltp_vals^(num_siltp_resolutions));
+                uniform_contribution(i) = sum( uniform_lik)/uniform_const*uniform_density;
+            end
+        end 
     end
 end
-
 num_sigmas = i;
 sigmas = sigma;
 
@@ -64,18 +72,22 @@ if num_model_frames == 0
     sigma_image = zeros(num_rows, num_cols);
     return;
 end
-
+    
 %If model is not empty, use kde likelihood estimation
 
 %For each pixel in the image
 for i=1:num_rows*num_cols
     %get the row and column number
     [r c] = get_2D_coordinates(i, num_rows, num_cols);
-
+    %if r==num_rows && rem(c, 50)==0
+    %    c
+    %end
+    
     %Process a pixel only if selection_map value is 0, else set it to a pre-calculated value and sigma (given as input to this function)
+    %Do full processing only if selection image is 0
     if selection_map(r,c) == 1
-        liks(r,c) = selection_liks(r,c);
-        sigma_image(r, c) = selection_sigma_image(r, c);
+        liks(r,c) = selection_liks( r,c);
+        sigma_image(r,c) = selection_sigma_image(r,c);
     else
 
         %find out the indices of the neighbors
@@ -85,11 +97,27 @@ for i=1:num_rows*num_cols
         max_col = min(num_cols, c+neighborhood_cols);
         num_centers = num_model_frames*(max_row-min_row+1)*(max_col-min_col+1);
         %kde data samples
-        kde_centers = model(1:num_model_frames, min_row:max_row, min_col:max_col, :);
-        kde_centers_reshape = reshape(kde_centers, [num_centers num_dims]);
-        current_sample = pixel_samples(r,c,:);
+        kde_centers = model(1:num_model_frames, min_row:max_row, min_col:max_col, 1:num_dims-1);
+        kde_centers_reshape = reshape(kde_centers, [num_centers num_dims-1]);
+        current_sample = pixel_samples(r,c,1:num_dims-1);
         current_sample_repeat = repmat( current_sample(:)', [ num_centers 1]);
         diff = kde_centers_reshape-current_sample_repeat;
+        %Calculate the difference in SILTP feature space -- difference in bit values
+        for siltp_res=1:num_siltp_resolutions
+            siltp_kde_centers = model(1:num_model_frames, min_row:max_row, min_col:max_col, siltp_res+5);
+            siltp_kde_centers_reshape = reshape(siltp_kde_centers, [num_centers 1]);
+            %siltp_kde_centers_reshape_bin = dec2bin(siltp_kde_centers_reshape,8);
+            siltp_kde_centers_reshape_bin = dec2bin_lutable( siltp_kde_centers_reshape+1,:);
+            current_sample_siltp = pixel_samples(r,c,siltp_res+5);
+            %current_sample_siltp_bin = dec2bin( current_sample_siltp, 8);
+            current_sample_siltp_bin = dec2bin_lutable( current_sample_siltp+1, :);
+            current_sample_siltp_repeat_bin = repmat( current_sample_siltp_bin, [ num_centers 1]);
+%            current_sample_siltp_repeat_bin = dec2bin( current_sample_siltp_repeat, 8);
+            diff_siltp = siltp_kde_centers_reshape_bin-current_sample_siltp_repeat_bin;
+            abs_diff_siltp = sum( abs(diff_siltp), 2);
+            %concatenate the siltp diff to the diff matrix
+            diff(:,siltp_res+5) = abs_diff_siltp;
+        end
         %Find out which pixels are part of model
         true_mask = indicator(1:num_model_frames, min_row:max_row, min_col:max_col);
         %Reshape to enable efficient multiplication
@@ -104,7 +132,7 @@ for i=1:num_rows*num_cols
         %fprintf('exp takes %f secs\n', toc);
         %tic 
         %multiply each sample's contribution by the mask and then sum all contributions
-        lik_sum_all_sigmas = sum(lik_indiv.*true_mask_repeat);
+        lik_sum_all_sigmas = sum(lik_indiv.*true_mask_repeat, 1);
         %fprintf('lik sum takes %f secs\n', toc);
         %tic 
         %Uncomment below to normalize by number of frames in model - CVPR 2012 model
