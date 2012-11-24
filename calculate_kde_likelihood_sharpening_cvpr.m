@@ -45,9 +45,6 @@ for Y=sigma_Ys
             uniform_const = (det_xy^.5)*2*pi;
             uniform_lik = exp(-.5*(uniform_xy_diff.*uniform_xy_diff)*uniform_sigma_inv);
             uniform_density = 1/num_vals/num_vals/num_vals;
-            %TODO - Remove these hardcoded values below
-            %uniform_density = 1/100/100/100;
-            %uniform_density = 1/256/256/256;
             uniform_contribution(i) = sum( uniform_lik)/uniform_const*uniform_density;
         end
     end
