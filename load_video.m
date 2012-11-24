@@ -4,6 +4,20 @@
 %* All rights reserved.
 %
 
+%Folder where a resulting mat file with output masks, segmented output frames,
+%etc are saved. 
+%NOTE - Ensure that the folder mentioned below has the following subfolders
+%/I2R/Hall
+%/I2R/Bootstrap
+%/I2R/Curtain
+%/I2R/Escalator
+%/I2R/Fountain
+%/I2R/ShoppingMall
+%/I2R/Lobby
+%/I2R/Campus
+%/I2R/WaterSurface
+%Alternatively, change the output_sequences_folder variable for each folder in
+%this script
 output_main_folder = '/scratch1/narayana/output_data/dist_fields/kde_output';
 
 %Video number 
@@ -39,7 +53,6 @@ if(video_number == 1)
     skip_until_frame = 1051;
     %Total number of frames to classify
     total_num_frames = 4583;
-    %TODO - Remove this
     skip_until_frame = 1654;
     total_num_frames = 1658;
 

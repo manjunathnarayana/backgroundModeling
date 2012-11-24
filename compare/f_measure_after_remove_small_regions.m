@@ -6,6 +6,7 @@ end
 if ~exist('p_threshold')
     p_threshold = .5;
 end
+
 for i = 1:size( gt_frames_truth, 3)
     pred_img = gt_frames_prediction(:,:,i);
     truth_img = gt_frames_truth(:,:,i);
@@ -15,6 +16,6 @@ for i = 1:size( gt_frames_truth, 3)
     f_measure_clean = find_f_measure( pred_img_filtered, truth_img);
     f_measures_clean( i ) = f_measure_clean;
 end
-f_measure_clean_sum = sum(f_measures_clean)/size( gt_frames_truth,3)
+f_measure_cleaned_average = sum(f_measures_clean)/size( gt_frames_truth,3)
 
 

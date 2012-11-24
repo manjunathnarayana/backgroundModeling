@@ -25,8 +25,15 @@
 %* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 %*/
 
-%Usage - Change video number and run code. To add more videos,
-%change load_video.m file
+%Usage - 
+%(1) Change video number to select appropriate video. Note that video_numbers
+%can be an array of video numbers which will be processed in sequence
+%(2) Change path to input video, input groundtruth, output folder in load_video.m
+%(3) Set algorithm_to_use variable in this script
+%(4) Set any optional parameters in this script
+%(5) Run video. Note that it may take several hours for complete video
+%sequence to be processed. If you desire to run script for a smaller subset of
+%video frames, change the total_num_frames variable in load_video.m
 
 addpath( genpath ('utils'));
 addpath( genpath ('compare'));
@@ -56,9 +63,6 @@ for video_number = video_numbers
     %(1) BMVC 2012 - joint domain-range + adaptive kernel variance 
     %(2) CVPR 2012 - adaptive kernel variance
     %(3) Our implementation of Sheikh-Shah
-    %(4) Ihler code for kernel variance calculation (AMISE criterion in CVPR 2012 paper)
-    %(5) knn distance as variance - undocumented algorithm that uses the distance of the estimation point to the k-th nearest neighbor among the kde samples as variance
-    %(6) use variance learned from first few frames (no adaptive kernel variance after that)
     algorithm_to_use = 3;
 
     %Call load video script
@@ -68,7 +72,8 @@ for video_number = video_numbers
     disp( videoname);
     disp( input_sequence_files_suffix);
 
-    %display options
+    %display options. Set to 1 to see frame-by-frame segmentation results in a
+    %figure
     display_general = 0;
 
     %max frames to classify
@@ -80,7 +85,8 @@ for video_number = video_numbers
     %num frames used for fg KDE
     num_fg_frames = 5;
 
-    %TODO - explain this
+    %For CVPR algorithm, a uniform likelihood is added to the foreground model to account for new objects appearing in the scene.
+    %combined_fg_likelihood = (1-factor)*fg_likelihood + factor*uniform_likelhood
     fg_uniform_factor = .5;
 
     %Algorithm options
@@ -124,30 +130,43 @@ for video_number = video_numbers
         fg_sigma_images_old = cell(1, num_resolutions);
     end
 
-    %Algorithm 5
-    %k-th neighbor to use (for algorithm 5)
-    k_th_neighbor = 2;
-    
     %Flag that is set when a reinitialization is in progress
     reinitialize_mode_flag = 0;
     %Count of number of frames since reinitialization has begun
     num_reinitialize_frames = 0;
 
     %How bg and fg models are updated
-    %TODO - Explain the options
+    %See update_kde_model.m for details of these options
     bg_update_version = 3;
     fg_update_version = 1;
 
-    %TODO - Print information about method being used, etc.
-
-    fprintf('num resolutions = %d\n', num_resolutions);
+    disp('Classifying pixels as bg/fg using color feature space in joint domain-range model');
+    %Printing information about algorithms and options being used
+    fprintf('Num resolutions = %d\n', num_resolutions);
     
     if use_LAB
         fprintf('Using LAB colorspace');
     else
         fprintf('Using RGB colorspace');
     end
+   
+    if use_bg_fg_new_classes
+        fprintf('Using bg/fg/new_fg classification\n');
+    else
+        fprintf('Using bg/fg classification\n');
+    end
     
+    if use_intensity_change_reasoning
+        fprintf('Using intensity change reasoning to detect sudden intensity spikes\n');
+    end
+    
+    if use_MRF_clean_procedure
+        fprintf('Using MRF clean-up procedure with lambda value %.2f\n', MRF_lambda);
+    end
+    
+    if use_efficient_sigma_cache
+        fprintf('Using efficient caching procedure Narayana et. al CVPR 2012\n');
+    end
     % First generate a bg model with num_bg_frames. (rows*cols*num_bg_frames)x5 in size. Reads [y, x, red, green, blue]
     bg_model = cell(1, num_resolutions);
     fg_model = cell(1, num_resolutions);
@@ -160,6 +179,7 @@ for video_number = video_numbers
     temp_image = imread(sprintf('%s/%s%03d.%s', input_video_folder, input_sequence_files_suffix, seq_starts_from+0, file_ext));
     num_rows = size(temp_image, 1);
     num_cols = size(temp_image, 2);
+    num_colors = size( temp_image, 3);
     clear temp_image;
     
     %Initialize a bg model from required number of frames
@@ -229,110 +249,94 @@ for video_number = video_numbers
     %For RGB color space sigma values
     if use_LAB == 0
         bg_sigma_XYs{1} = [1/4 3/4];
-        bg_sigma_Ys{1}  = [5/4 15/4 45/4];
-        bg_sigma_UVs{1} = [5/4 15/4 45/4];
+        bg_sigma_Ls{1}  = [5/4 15/4 45/4];
+        bg_sigma_ABs{1} = [5/4 15/4 45/4];
         fg_sigma_XYs{1} = [12/4];
-        fg_sigma_Ys{1}  = [15/4];
-        fg_sigma_UVs{1} = [15/4];
+        fg_sigma_Ls{1}  = [15/4];
+        fg_sigma_ABs{1} = [15/4];
     else
     %LAB sigma values
         bg_sigma_XYs{1} = [1/4 3/4];
-        bg_sigma_Ys{1}  = [5/4 10/4 15/4];
-        bg_sigma_UVs{1} = [4/4 6/4];
+        bg_sigma_Ls{1}  = [5/4 10/4 15/4];
+        bg_sigma_ABs{1} = [4/4 6/4];
         fg_sigma_XYs{1} = [12/4];
-        fg_sigma_Ys{1}  = [15/4];
-        fg_sigma_UVs{1} = [6/4];
+        fg_sigma_Ls{1}  = [15/4];
+        fg_sigma_ABs{1} = [6/4];
     end
     
     fprintf('bg_sigma_XYs{1}\n')
     bg_sigma_XYs{1}(:)'
-    fprintf('bg_sigma_Ys{1}\n')
-    bg_sigma_Ys{1}(:)'
-    fprintf('bg_sigma_UVs{1}\n')
-    bg_sigma_UVs{1}(:)'
+    fprintf('bg_sigma_Ls{1}\n')
+    bg_sigma_Ls{1}(:)'
+    fprintf('bg_sigma_ABs{1}\n')
+    bg_sigma_ABs{1}(:)'
     fprintf('fg_sigma_XYs{1}\n')
     fg_sigma_XYs{1}(:)'
-    fprintf('fg_sigma_Ys{1}\n')
-    fg_sigma_Ys{1}(:)'
-    fprintf('fg_sigma_UVs{1}\n')
-    fg_sigma_UVs{1}(:)'
+    fprintf('fg_sigma_Ls{1}\n')
+    fg_sigma_Ls{1}(:)'
+    fprintf('fg_sigma_ABs{1}\n')
+    fg_sigma_ABs{1}(:)'
 
     %If using multi-resolution, set up sigma values for each resolution
     if use_multi_resolution
         % Resolution 2
         bg_sigma_XYs{2} = [3/4];
-        bg_sigma_Ys{2} = [10/4];
-        bg_sigma_UVs{2} = [2/4];
+        bg_sigma_Ls{2} = [10/4];
+        bg_sigma_ABs{2} = [2/4];
         fg_sigma_XYs{2} = [3/4];
-        fg_sigma_Ys{2} = [10/4];
-        fg_sigma_UVs{2} = [2/4];
+        fg_sigma_Ls{2} = [10/4];
+        fg_sigma_ABs{2} = [2/4];
         % Resolution 3
         bg_sigma_XYs{3} = [3/4];
-        bg_sigma_Ys{3} = [10/4];
-        bg_sigma_UVs{3} = [2/4];
+        bg_sigma_Ls{3} = [10/4];
+        bg_sigma_ABs{3} = [2/4];
         fg_sigma_XYs{3} = [3/4];
-        fg_sigma_Ys{3} = [10/4];
-        fg_sigma_UVs{3} = [2/4];
+        fg_sigma_Ls{3} = [10/4];
+        fg_sigma_ABs{3} = [2/4];
         fprintf('bg_sigma_XYs{2}\n')
         bg_sigma_XYs{2}(:)'
-        fprintf('bg_sigma_Ys{2}\n')
-        bg_sigma_Ys{2}(:)'
-        fprintf('bg_sigma_UVs{2}\n')
-        bg_sigma_UVs{2}(:)'
+        fprintf('bg_sigma_Ls{2}\n')
+        bg_sigma_Ls{2}(:)'
+        fprintf('bg_sigma_ABs{2}\n')
+        bg_sigma_ABs{2}(:)'
         fprintf('fg_sigma_XYs{2}\n')
         fg_sigma_XYs{2}(:)'
-        fprintf('fg_sigma_Ys{2}\n')
-        fg_sigma_Ys{2}(:)'
-        fprintf('fg_sigma_UVs{2}\n')
-        fg_sigma_UVs{2}(:)'
+        fprintf('fg_sigma_Ls{2}\n')
+        fg_sigma_Ls{2}(:)'
+        fprintf('fg_sigma_ABs{2}\n')
+        fg_sigma_ABs{2}(:)'
         fprintf('bg_sigma_XYs{3}\n')
         bg_sigma_XYs{3}(:)'
-        fprintf('bg_sigma_Ys{3}\n')
-        bg_sigma_Ys{3}(:)'
-        fprintf('bg_sigma_UVs{3}\n')
-        bg_sigma_UVs{3}(:)'
+        fprintf('bg_sigma_Ls{3}\n')
+        bg_sigma_Ls{3}(:)'
+        fprintf('bg_sigma_ABs{3}\n')
+        bg_sigma_ABs{3}(:)'
         fprintf('fg_sigma_XYs{3}\n')
         fg_sigma_XYs{3}(:)'
-        fprintf('fg_sigma_Ys{3}\n')
-        fg_sigma_Ys{3}(:)'
-        fprintf('fg_sigma_UVs{3}\n')
-        fg_sigma_UVs{3}(:)'
+        fprintf('fg_sigma_Ls{3}\n')
+        fg_sigma_Ls{3}(:)'
+        fprintf('fg_sigma_ABs{3}\n')
+        fg_sigma_ABs{3}(:)'
     end
     
     %Consolidate the sigma values into a cell array for bg and fg
     bg_sigmas{1} = bg_sigma_XYs;
-    bg_sigmas{2} = bg_sigma_Ys;
-    bg_sigmas{3} = bg_sigma_UVs;
+    bg_sigmas{2} = bg_sigma_Ls;
+    bg_sigmas{3} = bg_sigma_ABs;
     fg_sigmas{1} = fg_sigma_XYs;
-    fg_sigmas{2} = fg_sigma_Ys;
-    fg_sigmas{3} = fg_sigma_UVs;
+    fg_sigmas{2} = fg_sigma_Ls;
+    fg_sigmas{3} = fg_sigma_ABs;
     
     if (size(bg_sigma_XYs, 2)~=num_resolutions) || (size(fg_sigma_XYs, 2)~=num_resolutions)
         error(' number of candidate sigmas should match the number or resolutions');
     end
     
-    %definition of neighborhood for kde calculation
     %pixels in a range + and - this value are used as samples in computing KDE likelihoods
     bg_near_rows = ceil( max( bg_sigma_XYs{1})*4/2);
     bg_near_cols = bg_near_rows;
     fg_near_rows = ceil( max( fg_sigma_XYs{1})*4/2);
     fg_near_cols = fg_near_rows;
             
-    %if need to learn a covariance from the first few frames
-    optimal_bg_sigma_index = [];
-    optimal_fg_sigma_index = [];
-    bg_sigma_values = [];
-    fg_sigma_values = [];
-   
-    %If variances are learned from first few frames and held fixed after that (no adaptive variance selection)
-    if algorithm_to_use == 6 
-        if num_resolutions == 1
-            [optimal_bg_sigma_indexes bg_sigma_values] = get_optimal_sigmas_from_model( bg_model{1}, bg_indicator{1}, bg_sigma_XYs{1}, bg_sigma_Ys{1}, bg_sigma_UVs{1}, bg_near_cols, bg_near_rows, 0);
-        else
-            error('Error - Learning sigmas from model does not work for higher than 1 resolution');
-        end
-    end
-   
     %Variables to store accuracy statistics and groundtruth related data
     f_measure_sum=0;
     f_measures = [];
@@ -471,37 +475,11 @@ for video_number = video_numbers
             end
         end
 
-        %Classic variance selection algorithms (AMISE)
-        if algorithm_to_use == 4
-            if use_bg_fg_new_classes %if use_ihler_code TODO which of these two are to be used? Also remove reference to ihler in function names. Credit Ihler in your documentation
-                [bg_mask fg_mask] = classify_using_ihler_sharpening_sigma_3_classes( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, fg_uniform_factor, objects, object_near_rows, object_near_cols, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
-
-            else %if use_ihler_code_3_classes
-                [bg_mask fg_mask] = classify_using_ihler_sharpening_sigma( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, fg_uniform_factor, objects, object_near_rows, object_near_cols, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
-            end
-        end
-
-        %Computing variance using distance to k-th nearest neighbor
-        if algorithm_to_use == 5
-            if use_bg_fg_new_classes
-                [bg_mask fg_mask] = classify_using_kde_knn_distance_as_sigma_3_classes( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, fg_uniform_factor, objects, object_sigmas, object_near_rows, object_near_cols, k_th_neighbor, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
-            else
-                [bg_mask fg_mask] = classify_using_kde_knn_distance_as_sigma( img_pixels, bg_model, bg_indicator, bg_sigmas, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, fg_uniform_factor, objects, object_sigmas, object_near_rows, object_near_cols, k_th_neighbor, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
-            end
-        end
-
-          
-        %Compute the best variance only from the first few frames. No adaptive variance selection after that
-        if algorithm_to_use == 6
-            [bg_mask fg_mask] = classify_using_kde_learned_bg_sigmas_3_classes( img_pixels, bg_model, bg_indicator, bg_sigma_values, optimal_bg_sigma_indexes, bg_prior, bg_near_rows, bg_near_cols, fg_model, fg_indicator, fg_sigmas, fg_prior, fg_near_rows, fg_near_cols, search_window, num_feature_vals, object_tracking_version, track_frame>= 12000000 );
-        end
-
-        if algorithm_to_use > 6 || algorithm_to_use <1
+        if algorithm_to_use > 3 || algorithm_to_use <1
             error('Error - Undefined algorithm_to_use');
         end
         
         %If post-processing clean-up using MRF is required
-        %TODO - Credit MRF code in documentation
         if use_MRF_clean_procedure
             bg_masks_unclean(:,:,track_frame) = bg_mask;
             bg_mask_clean = MRF_mincut_clean( bg_mask, fg_mask, MRF_lambda);
@@ -511,7 +489,6 @@ for video_number = video_numbers
         end
 
         bg_masks(:,:,track_frame) = bg_mask;
-        
         fg_mask = 1-bg_mask;
         
         if min(fg_mask(:))<0
@@ -560,9 +537,17 @@ for video_number = video_numbers
             gt_frame_prediction_threshed(:,:,gt_count) = threshed_fg_mask;
         end
 
-        %Display results
+        %Save segmented image to to segmented_image_stack
+        %Set all fg pixels (less than .5 bg probability) to img values. All
+        %other pixels are 0
+        fg_segmentation_mask = bg_mask<=gt_evaluation_threshold;
+        for color=1:num_colors
+            segmented_image(:,:,color) = uint8( img(:,:,color)).*uint8(fg_segmentation_mask);
+        end
+        segmented_image_stack(:,:,:,track_frame) = segmented_image;
+ %Display results
         if(display_general==1)
-            num_plots = 3;
+            num_plots = 4;
             figure; subplot(1,num_plots,1); 
             if use_LAB
                 imagesc( uint8(img+128));
@@ -575,6 +560,8 @@ for video_number = video_numbers
             title('bg probabilities');
             subplot(1,num_plots,3); imagesc( bg_mask>.5); colormap('default');
             title('bg segmented mask');
+            subplot(1,num_plots,4); imagesc( segmented_image); colormap('default');
+            title('segmenteded foreground');
             impixelinfo
             %keyboard
             pause
@@ -638,19 +625,11 @@ for video_number = video_numbers
         output_sequence_files_suffix = sprintf('initial_frames_variance_%s', output_sequence_files_suffix);
     end
     
-    f_measure_sum
-    f_measure_sum/size(f_measures,2);
-
-    %script that f_measure calculation after removing small regions 
-    f_measure_after_remove_small_regions
-    %TODO - What does this do?
+    %Compute the F-measure by considering all pixels from all groundtruth frames (Not simply the average of F-measures per frame
     consolidated_f_measure_on_video_results
-    current_video_TP
-    current_video_FP
-    current_video_FN
 
     save_sequences_filename  = [ output_sequences_folder '/' output_sequence_files_suffix '_' name_string '_' input_sequence_files_suffix '_' num2str(skip_until_frame) '_' num2str(max_track_frame) '_fms_' 'bg_' num2str(num_bg_frames) '_fg_' num2str(num_fg_frames) '_updt_bg_fg_' num2str(bg_update_version) '_' num2str(fg_update_version) '_1803d.mat'];
-%    save(save_sequences_filename, 'bg_masks', 'bg_masks_unclean', 'image_stack_work', 'image_stack', 'save_sequences_filename', 'f_measure_sum', 'f_measures', 'gt_frames_prediction', 'gt_frames_truth', 'gt_frames_image', 'videoname', 'input_sequence_files_suffix', 'seq_starts_from', 'skip_until_frame', 'total_num_frames', 'ground_truth_frames', 'bg_sigmas', 'fg_sigmas', 'object_sigmas', 'num_resolutions', 'fg_uniform_factor', 'optimal_bg_sigma_index', 'optimal_fg_sigma_index', 'bg_sigma_values', 'fg_sigma_values');
+    save(save_sequences_filename, 'bg_masks', 'bg_masks_unclean', 'image_stack_work', 'image_stack', 'segmented_image_stack', 'save_sequences_filename', 'f_measure_sum', 'f_measures', 'gt_frames_prediction', 'gt_frames_truth', 'gt_frames_image', 'videoname', 'input_sequence_files_suffix', 'seq_starts_from', 'skip_until_frame', 'total_num_frames', 'ground_truth_frames', 'bg_sigmas', 'fg_sigmas', 'num_resolutions', 'fg_uniform_factor');
 
     %If video_numbers is an array, then delete all variables except video_numbers and then proceed
     if size(video_numbers, 2)>1
@@ -659,4 +638,10 @@ for video_number = video_numbers
         load('del_temp.mat');
         delete('del_temp.mat');
     end
+end
+
+%If running script for single video, then at the end display the input video
+%and segmented output
+if size(video_numbers, 2)==1
+step_through_color_image_sequence_pair( image_stack, segmented_image_stack );
 end
